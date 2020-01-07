@@ -1,0 +1,1374 @@
+To start running the command shell, type ./ffosh.
+
+The shell "ffosh" works with the help from two classes, one is "ShellWorker", the other is "vectorHelper". The "vectorHelper" is for extracting argument list\
+ and the path list from the input command line. These two lists will later be passed to the ShellWorker, which will implement different operations based on t\
+he command types with the argument list and path list provided by vectorHelper.
+
+I also build some programs for testing. "print" is simply printing a sentence without taking any arguments. "print_arg" will take arguments and print them out. "segfault" is for testing segfaults, and should be killed by signal 11.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------Some clarifications -----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+In the commandShell.txt, we are asked to handle the arguments in the following manners:
+
+	1. Make commands such that they can take arguments separated by white space. For example
+	    ./myProgram a b 23
+
+	2. Handle an arbitrary amount of whitespace in between arguments, for example 
+	    ./myProgram         a               b     23
+	   runs myProgram with arguments "a," "b," and "23."
+	  
+	3. The user may also use "s to include literal whitepsace:
+	     ./myProgram  "a   b"   c       "def   ghi"
+	   runs myProgram with 3 arguments:
+	   1. a   b
+	   2. c
+	   3. def   ghi
+
+	4. Your shell should support escaped quotation marks (\") and backslashes (\\) to allow the user to write a literal quotation mark and backslashes:
+	     ./myProgram  "\"hello world\""   "a\\b\\c d\\"
+	   runs myProgram with 2 arguments
+	   1. "hello world"
+	   2. a\b\c d\
+
+	5. It is an error to have an unclosed quotation mark at the end of the command line.
+
+
+Aside from the basic requirements mentioned in commandShell.txt, in my shell, I make my own rules to process the arguments:
+
+        1. I will ignore any single backslash that doesn't appear with a quotation mark or a backslash to be a whitespace. The backslash will only be used to\
+ support escaped quotation marks (\"), backslashes (\\) and whitespace(\ ).  i.e,
+             ./myProgram  "a\b"    \c  \ \
+           runs myProgram with 3 arguments:
+           1. ab
+           2. c
+           3.  (single whitespace, if quoted it will be like " ")
+
+        2. I will treat any single quotation mark that is located in the MIDDLE of an argument and without a backslash ahead to be a whitespace. i.e,
+             ./myProgram  "a"b"   "def""ghi"   abc"abc"abc
+           runs myProgram with 3 arguments:
+           1. a b
+           2. def  ghi
+           3. abc abc abc
+
+        3. I define a quotation mark unclosed only when it is singly at the beginnig or the end of an argument
+            ./myProgram         "a b     23
+           the above is an example of an unclosed argument
+
+        4. All the escaped settings above are not valid for the "set" command. When using set command, we expect to read the variable value whatever the user\
+ inputs, just as the README goes: "This should set the variable var to the string on the rest of the command line (even if it contains spaces, etc.)"
+
+ 
+  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------- Basic test -------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1.  
+Run:
+./ffosh
+
+Output: 
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because when start running, this shell should first print out the current directory.
+
+-------------------------------------------------------------------------
+2.  
+Run: 
+\n
+
+Output: 
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because the input is empty, the shell should print out the current directory and wait for the next input.
+
+-------------------------------------------------------------------------
+3.  
+Run: 
+control+D
+
+Output: 
+yl559@ece551:~/ece551/mp_miniproject$
+
+Reason: It is correct because EOF is encountered when reading from stdin, then the shell should exit.
+
+-------------------------------------------------------------------------
+4.  
+Run:
+exit
+
+Output: 
+yl559@ece551:~/ece551/mp_miniproject$
+
+Reason: It is correct because the user types the command "exit" then the shell should exit.
+
+-------------------------------------------------------------------------
+5.  
+Run:
+env
+
+Output: 
+....
+SSH_CONNECTION=198.86.29.21 58873 152.3.77.223 22
+LESSCLOSE=/usr/bin/lesspipe %s %s
+LANG=en_US.UTF-8
+EDITOR=emacs -nw
+S_COLORS=auto
+XDG_SESSION_ID=81537
+USER=yl559
+PWD=/home/yl559/ece551/mp_miniproject
+HOME=/home/yl559
+SSH_CLIENT=198.86.29.21 58873 22
+SSH_TTY=/dev/pts/27
+MAIL=/var/mail/yl559
+VISUAL=emacs -nw
+TERM=xterm-256color
+SHELL=/bin/bash
+SHLVL=1
+LOGNAME=yl559
+XDG_RUNTIME_DIR=/run/user/1474
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+LESSOPEN=| /usr/bin/lesspipe %s
+_=./ffosh
+OLDPWD=/home/yl559/ece551/mp_miniproject/oldversion
+ECE551PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+Program was successful
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because the shell should print out all the environmental variables when the input is "env".
+
+-------------------------------------------------------------------------
+6. 
+Run:
+./segfault
+
+Output:
+Terminated by signal 11
+
+Reason: It is correct because the shell runs the program ./segfault, which simply segfaults, and is killed by signal 11 (SIGSEGV).
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------- Program running test  --------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+1.  
+Run: 
+nonexistprogram
+
+Output: 
+Error: the program doesn't exist
+
+Reason: It is correct because after looking into the ECE551PATH, my shell didn't find such a program exists.
+
+-------------------------------------------------------------------------
+2.  
+Run: 
+./nonexistprogram
+
+Output: 
+Error: the program doesn't exist
+
+Reason: It is correct because after searching in the current directory, my shell didn't find such a program exists.
+
+-------------------------------------------------------------------------
+3.  
+Run: 
+./print
+
+Output: 
+this is the mini project: command shell 
+Program was successful
+
+Reason: It is correct because after searching in the current directory, my shell did find such a program exists, so the shell would run it. After running it, 
+it prints out the sentence "this is the mini project: command shell"
+
+-------------------------------------------------------------------------
+4.  
+Run: 
+../mp_miniproject/print
+
+Output: 
+this is the mini project: command shell 
+Program was successful
+
+Reason: It is correct because the shell would search in the specified ../mp_miniproject directory, find the program "print", and do the printing. 
+
+-------------------------------------------------------------------------
+5.  
+Run: 
+/home/yl559/ece551/mp_miniproject/print
+
+Output: 
+this is the mini project: command shell 
+Program was successful
+
+Reason: It is correct because a full path is provided to the shell, the shell would search this path and execute the print program.
+
+-------------------------------------------------------------------------
+6.  
+Run: 
+/home/yl559/ece551/mp_miniproject/print_arg 1 2 3
+
+Output: 
+"1"
+"2"
+"3"
+Program was successful
+
+Reason: It is correct because print_arg is a program that prints all the input arguments line by line, with quotation marks. Here we input 1,2,3, so the shell will print "1","2","3".
+
+-------------------------------------------------------------------------
+7.  
+Run: 
+../mp_miniproject/print_arg 1 2 3
+
+Output: 
+"1"
+"2"
+"3"
+Program was successful
+
+Reason: It is correct because print_arg is a program that prints all the input arguments line by line, with quotation marks. Here we input 1,2,3, so the shell will print "1","2","3".
+
+-------------------------------------------------------------------------
+8.  
+Run: 
+./print_arg 1 2 3
+
+Output: 
+"1"
+"2"
+"3"
+Program was successful
+
+Reason: It is correct because print_arg is a program that prints all the input arguments line by line, with quotation marks. Here we input 1,2,3, so the shell will print "1","2","3".
+
+-------------------------------------------------------------------------
+9.  
+Run: 
+./print_arg 1     2       3
+
+Output: 
+"1"
+"2"
+"3"
+Program was successful
+
+Reason: It is correct because the shell should be able to handle the case where the arguments are seperated by an arbitrary amount of whitespace. The input arguments are 1, 2, 3. And the shell should print these arguments.
+
+-------------------------------------------------------------------------
+10.  
+Run: 
+./print_arg \
+
+Output: 
+""
+Program was successful
+
+Reason: It is correct because in my setting, I will ignore any single backslash. So when the argument is a single backslash, the program should print an empty string, which is ""
+
+-------------------------------------------------------------------------
+11.  
+Run: 
+./print_arg \\           
+
+Output: 
+"\"
+Program was successful
+
+Reason: It is correct because the shell should support escaped backslashes (\\) to allow the user to write a literal and backslashes. When the input is \\, the program should print a single backslash.
+
+-------------------------------------------------------------------------
+12.  
+Run: 
+./print_arg \ \ \
+
+Output: 
+"  "
+Program was successful
+
+Reason: It is correct because in my setting, when a backslash is followed by a whitespace, the shell should support escaped whitespace ("\ "). In this case, there are two consecutive "\ ", followed by a single backslash. The two consecutive "\ " should give two consecutive whitespace, and the single backslash should be ignored. Thus the output "  ".
+
+-------------------------------------------------------------------------
+13.  
+Run: 
+./print_arg 1 1\  \          
+
+Output: 
+"1"
+"1 "
+""
+Program was successful
+
+Reason: It is correct because the first argument is simply a number. The second argument is a number followed by a backslash and a whitespace. The whitespace get escaped, as reflected in the print-out results. The whole line ends with a single backslash, which is ignored. 
+
+-------------------------------------------------------------------------
+14.  
+Run: 
+./print_arg \\  \ \   
+
+Output: 
+"\"
+"  "
+Program was successful
+
+Reason: It is correct because the first argument is an escaped backslash. The second argument starts with a backslash, followed by a whitespace and another backslash and another whitespace. The whitespace both get escaped, so print out "  ".
+
+-------------------------------------------------------------------------
+15.  
+Run: 
+./print_arg \\\ \\
+
+Output: 
+"\ \"
+Program was successful
+
+Reason: It is correct because even though the backslashes are seperated by a single whitespace, in fact this is a sequence of escaped characters. Two backslashes and a whitespace get escaped, which prints out "\ \".
+
+-------------------------------------------------------------------------
+16.  
+Run: 
+./print_arg 1\2   1 \2     1\ 2
+
+Output: 
+"12"
+"1"
+"2"
+"1 2"
+Program was successful
+
+Reason: It is correct because in the first argument, the single backslash between 1 and 2 is ignored. In the second argument, 1 is followed by a non-escaped whitespace, so 1 is the second argument. The third argument starts with a backslash, followed by 2 and some whitespace. The backslash should be ignored so it prints 2 itself. In the last argument, 1 and 2 is seperated by a backslash and a whitespace, which is an escaped whitespace. So the last arguments prints out "1 2".
+
+-------------------------------------------------------------------------
+17.  
+Run: 
+./print_arg  \\2   1\\ 2                   
+
+Output: 
+"\2"
+"1\"
+"2"
+Program was successful
+
+Reason: It is correct because the first argument contains an escaped backslash, followed by a 2. So it prints out "\2". The second argument starts with a 1 and then two consecutive backslashes, which is an escaped backslash. So the second argument prints out "1\". Even though the second argument and the third argument are only seperated by a single whitespace, and this whitespace's prior character is a backslash, we need to notice that this backslash is an escaped one. So the last argument should only be 2.
+
+-------------------------------------------------------------------------
+18.  
+Run: 
+./print_arg   1\ \ 2  \ \2
+
+Output: 
+"1  2"
+" 2"
+Program was successful
+
+Reason: It is correct because the first argument is 1 followed by two escaped whitespace and 2. So it prints out "1  2". The second argument is an escaped whitespace, followed by a single backslash(which should be ignored) and then a number. So finally the second argument should print " 2".
+
+-------------------------------------------------------------------------
+19.  
+Run: 
+./print_arg "
+
+Output: 
+Error: unclosed quotation mark
+
+Reason: It is correct because the argument is a single quotation mark, which is not closed. So error printed.
+
+-------------------------------------------------------------------------
+20.  
+Run: 
+./print_arg  "   "
+
+Output:
+"   " 
+Program was successful
+
+Reason: It is correct because the user may use quotation marks to include literal whitepsace. So the output should follow the input's style. 
+
+-------------------------------------------------------------------------
+21.  
+Run: 
+./print_arg  "   ""
+
+Output:
+"    "
+Program was successful
+
+Reason: It is correct because this is a quoted argument. In my settings, I will treat any single quotation mark that is located in the MIDDLE of an argument and without a backslash ahead to be a whitespace. In this case, when the second quotation mark is encountered, the shell should notice that its following character is not a whitespace, and thus this argument hasn't finished, which renders this quotation mark as a whitespace for printing. The shell should continue to read the next character, read a quotation mark and read its next is a whitespace. Now this argument is really ended. So the printed-out result is four whitespace.
+
+-------------------------------------------------------------------------
+22.  
+Run: 
+./print_arg  "   "  "   
+
+Output: 
+Error: unclosed quotation mark
+yl559@ece551:~/ece551/mp_miniproject$ 
+
+Reason: It is correct because when the second quotation mark is encountered, the shell read and find it's followed by a whitespace, which ends this argument. The shell then start to read the next character as the second argument, but only to find a single, non-closed quotation mark. Thus error printed out.
+
+-------------------------------------------------------------------------
+23.  
+Run: 
+./print_arg  "   "a
+
+Output:
+Error: unclosed quotation mark
+
+Reason: It is correct because the second quotation mark is followed by a letter "a", thus the shell won't consider this quoted argument as ended, but rather it will treat the second quotation mark as in the middle of this argument and replace it with whitespace. As there's no quotation mark after the letter 'a', error is reported as unclosed quotation mark.
+
+-------------------------------------------------------------------------
+24.  
+Run: 
+./print_arg \a\ \\\"  \ a\"\\    \ \"
+
+Output: 
+"a \""
+" a"\"
+" ""
+Program was successful
+
+
+Reason: It is correct because in the first argument, the backslash before the letter 'a' is ignored. An escaped whitespace follows the letter 'a', then an escaped backslash, then an escaped quotation mark. The second argument starts with an escaped whitespace, then letter 'a', then an escaped quotation mark and an escaped backslash. The third argument is simply an escaped quotation mark and an escaped backslash. The "print_arg" printed them all as the way they should be processed
+
+-------------------------------------------------------------------------
+25.  
+Run: 
+./print_arg "\\    \ "  \\    \ "
+
+Output: 
+Error: unclosed quotation mark
+
+Reason: It is correct because the first argument is inside quotation marks, so not only the normal escaped whitespace, but also all the other whitespace are included in this quoted argument. Remove the first quotation mark of the first argument, we have \\    \ ". Since it's unquoted, the whitespace will be ignored. There's a single quotation mark that left this argument unclosed. So error printed.
+-------------------------------------------------------------------------
+26.  
+Run: 
+/home/yl559/ece551/mp_miniproject/print_arg 1 2 3
+
+Output: 
+1
+2
+3
+Program was successful
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because here I used the full path to identify the "print_arg" program. And the shell should be able to recognize it and run this program. 
+
+-------------------------------------------------------------------------
+27.  
+Run: 
+/home/yl559/ece551/
+
+Output: 
+Error: execve
+Program failed with code 1
+
+Reason: It is correct because the full path here is a directory rather than an executable program. So the program failed.
+
+-------------------------------------------------------------------------
+28.  
+Run: 
+./commandShell.txt
+
+Output: 
+Error: execve
+Program failed with code 1
+
+Reason: It is correct because commandShell.txt is not an executable program. So the program failed.
+
+-------------------------------------------------------------------------
+29.  
+Run: 
+more commandShell.txt
+
+Output: 
+Mini-Project Option: Command Shell
+==================================
+
+For this option, you will write a simplified version of a command shell
+(ffosh--for Five Fifty One SHell).
+You should use C++ for this program, so that you can demonstrate your
+command of object orientation.
+.......
+
+Reason: It is correct because the shell execute the command "more", with the argument commandShell.txt. So the content of commandShell.txt is displayed in the output.
+
+-------------------------------------------------------------------------
+30.  
+Run: 
+./print_arg 1"\ 2   1\"  1
+
+Output: 
+"1  2"
+"1""
+"1"
+Program was successful
+
+Reason: It is correct because the shell should read the arguments based on the rules I set for reading. In the first argument, a single quotation mark without escaping and not followed by whitespace should be treated as a whitespace. It then follows an escaped whitesapce and a number '2'. The second argument is a number 1, an escpaed quotation mark, then it follows a whitespace, which renders this argument ended. So the second argument prints as a number '1' and a quotation mark '"'. The last argument is just simply a number '1'. 
+
+-------------------------------------------------------------------------
+31.  
+Run: 
+./print_arg 1""\" 1""\  1"\"
+
+Output: 
+"1  ""
+"1   "
+"1 ""
+Program was successful
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because all the quotation marks, if neither behind a backslash nor followed by a whitespace, should be treated as a whitespace in the argument.
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------- Bin's commands test ----------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1. 
+Run: 
+/bin/ls
+
+Output: 
+commandShell.txt  ffosh.cpp   Makefile   numerics.txt  shellworker.cpp  TESTING.txt   try       vectorHelper.h
+ffosh         ffosh.cpp~  Makefile~  README        shellworker.h    TESTING.txt~  vectorHelper.cpp
+Program was successful
+
+Reason: It is correct because the shell execute ls and list all the files within the current directory. After finish "ls", the shell should print out the current directory and wait for the next input.
+
+-------------------------------------------------------------------------
+2. 
+Run:
+ls
+
+Output: 
+commandShell.txt  ffosh.cpp   Makefile   numerics.txt  shellworker.cpp  TESTING.txt   try       vectorHelper.h
+ffosh         ffosh.cpp~  Makefile~  README        shellworker.h    TESTING.txt~  vectorHelper.cpp
+Program was successful
+
+Reason: It is correct because the shell searches the path list for "ls", then execute ls and list all the files within the current directory. After finish "ls", the shell should print out the current directory and wait for the next input.
+
+-------------------------------------------------------------------------
+3.  
+Run: 
+pwd
+
+Output: 
+/home/yl559/ece551/mp_miniproject
+Program was successful
+ffosh:/home/yl559/ece551/mp_miniproject 
+
+Reason: It is correct because the shell execute the pwd command and print out the current work directory.
+
+-------------------------------------------------------------------------
+4.  
+Run:
+nonexist
+
+Output: 
+Error: the program doesn't exist
+
+Reason: It is correct because the shell searches the path list for this program but didn't find it. So error reported.
+
+-------------------------------------------------------------------------
+5.  
+Run:
+/bin
+
+Output: 
+Error: execve
+Program failed with code 1
+
+Reason: It is correct because /bin is a directory, not an executable program. So the program failed.
+
+-------------------------------------------------------------------------
+6.  
+Run: 
+/bin/nonexist
+
+Output: 
+Error: execve
+Program failed with code 1
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because the shell searches for the program named "nonexist" in the specified "bin" directory but didn't find it. So error reported.
+
+-------------------------------------------------------------------------
+7.  
+Run: 
+cp README try
+
+Output: 
+Program was successful
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Run:
+cd try
+ls
+
+Output:
+README
+Program was successful
+
+Reason: It is correct because the shell will execute the cp commmand with two arguments "README" and "try". So as we can see by "ls", listing all the contents, the README is copied to the try directory. 
+
+-------------------------------------------------------------------------
+8.  
+Run: 
+echo let's     test        whitespace
+
+Output: 
+let's test whitespace
+Program was successful
+
+Reason: It is correct because the shell should be able to handle an arbitrary amount of whitespace between the arguments. And finally it prints "let's test whitespace" as expected.
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------- cd command test -----------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1.  
+Run cd 
+
+Output: Error: there's no target path
+        ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because there's only a command in the input line, no argument for cd command. the shell should print out the current directory and wait for the next input.
+
+-------------------------------------------------------------------------
+2.  
+Run cd a
+
+Output: Error: fail to use chdir to cd
+            ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because "a" is not a valid directory.
+
+-------------------------------------------------------------------------
+3.  
+Run cd /home   /bin
+
+Output: Error: more than one target path
+            ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because cd should followed by only one variable
+
+-------------------------------------------------------------------------
+4. 
+Run: 
+cd README
+
+Output: 
+Error: no such directory, chdir fails
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because README is not a valid directory to change to. So error printed.
+
+-------------------------------------------------------------------------
+5. 
+Run 
+cd .
+
+Output: 
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because "." indicates the current directory. 
+
+-------------------------------------------------------------------------
+6.  
+Run 
+cd ..
+
+Output: 
+ffosh:/home/yl559/ece551 $
+
+Reason: It is correct because ".." indicates the previous directory. cd will follow this specified directory and do change of directory.
+
+-------------------------------------------------------------------------
+7.  
+Run 
+cd 060_stat
+
+Output: 
+ffosh:/home/yl559/ece551/060_stat $
+     
+Reason: It is correct because cd will follow this specified directory and do change of directory.
+
+-------------------------------------------------------------------------
+8.  
+Run 
+cd ../061_ch14rq
+
+Output: 
+ffosh:/home/yl559/ece551/061_ch14rq $
+
+Reason: It is correct because cd should be able to recognize the combination of ".." and a relative path. Then it will follow this specified directory and do change of directory.
+
+-------------------------------------------------------------------------
+9.  
+Run 
+cd ~
+
+Output: 
+ffosh:/home/yl559 $
+
+Reason: It is correct because when cd is followed by "~", it should change to the home directory.
+
+-------------------------------------------------------------------------
+10.  
+Run 
+cd /bin
+
+Output: 
+ffosh:/bin $
+
+Reason: It is correct because cd command be able to change directory based on a full path.
+
+-------------------------------------------------------------------------
+11. 
+Run cd /bin/ls
+
+Output:
+Error: no such directory, chdir fails
+
+Reason: It is correct because ls is not a directory. So chdir fails with it. 
+
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------- set command test -----------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1.  
+Run:
+set 
+        
+Output: 
+Error: missing varName and varValue
+Segmentation fault
+
+
+Reason: It is correct because set command need two arguments: a variable name and its value.
+
+-------------------------------------------------------------------------
+2.  
+Run: 
+set a 
+
+Output: 
+Error: missing varValue
+Segmentation fault
+
+
+Reason: It is correct because set command need two arguments: a variable name and its value. Here the value is missing.
+
+-------------------------------------------------------------------------
+3.  
+Run: 
+set a aa
+echo $a
+
+Output: 
+aa
+Program was successful
+            
+Reason: It is correct because a is set to be aa. When using echo $a, the shell should be able to interprete this variable as "aa".
+
+-------------------------------------------------------------------------
+4.  
+Run: 
+set b a is     aa
+echo $b
+
+Output: 
+a is     aa
+Program was successful
+     
+Reason: It is correct because when using set command, the shell should first recognize a valid variable name, then treat the rest of the command line all as this variable's value, even with whitespace or backslashes. Here the shell handles the whitespace well, printed out "a is     aa".
+
+-------------------------------------------------------------------------
+5.  
+Run:
+set c  "three"     "quoted" "words"
+echo $c
+
+Output: 
+"three"     "quoted" "words"
+Program was successful
+
+Reason: It is correct because according to my rules, when executing "set" command, the shell should first recognize a valid variable name, then treat the rest of the command line all as this variable's value, even with whitespace or backslashes or unclosed quotation marks. Here the shell handles the quotation marks and the whitespace well.
+
+-------------------------------------------------------------------------
+6.  
+Run: 
+set abb "a\\is\ \aa"
+echo $abb
+
+Output: 
+"a\\is\ \aa"
+Program was successful
+     
+Reason: It is correct because the shell should treat the rest of the command line all as this variable's value, even with whitespace or backslashes or unclosed quotation marks. Here the shell handles the quotation marks and the whitespace well. Here it prints the backslashes as they are, which is as expected.
+
+-------------------------------------------------------------------------
+7.  
+Run: 
+set abb "a\\is\ \aa"
+echo $abbb
+
+Output: 
+Output:
+Error: fail to find the variable name in the map
+     
+Reason: It is correct because the variable name we set here is "abb". Even "abb" is included in the "abbb", the whole "abbb" is not a variable we have set before. So the shell should report error that it fails to find this variable in the map.
+
+-------------------------------------------------------------------------
+8. 
+Run:
+set abb%  "a\\is\ \aa"
+
+Output: 
+Error: abb% is not a valid name
+
+     
+Reason: It is correct because the variable name should only contain numbers, letters and '_'s. So error reported that this is not a valid name to set.
+
+-------------------------------------------------------------------------
+9.  
+Run 
+set a, apple
+Error: a, is not a valid name
+
+Output:
+     
+Reason: It is correct because the variable name should only contain numbers, letters and '_'s. So error reported that this is not a valid name to set.
+
+-------------------------------------------------------------------------
+10.  
+Run 
+set a. apple
+
+Output:
+Error: a. is not a valid name    
+
+Reason: It is correct because the variable name should only contain numbers, letters and '_'s. So error reported that this is not a valid name to set.
+
+-------------------------------------------------------------------------
+11.  
+Run 
+set a\ apple
+
+Output:
+Error: a\ is not a valid name
+
+Reason: It is correct because the variable name should only contain numbers, letters and '_'s. So error reported that this is not a valid name to set.
+
+-------------------------------------------------------------------------
+12.  
+Run
+set . apple
+
+Output:
+Error: . is not a valid name 
+
+Reason: It is correct because the variable name should only contain numbers, letters and '_'s. So error reported that this is not a valid name to set.
+
+-------------------------------------------------------------------------
+13. 
+Run:
+set abb5_ a is a
+echo abb5_
+echo $abb5_
+
+Output: 
+abb5_
+
+Output:
+a is a
+Program was successful
+ffosh:/home/yl559/ece551/mp_miniproject $  
+
+Reason: It is correct because the variable name should only contain numbers, letters and '_'s. Here we can see the shell handles '_' well.
+
+-------------------------------------------------------------------------
+14.  
+Run:
+set a cd ..
+$a
+
+Output: 
+Update the value as: cd ..
+ffosh:/home/yl559/ece551 $
+
+Reason: It is correct because here we set a as "cd ..", which the value itself is a command line. Input only '$a' should thus make the shell execute this command, which it did: cd to the upper directory.
+
+-------------------------------------------------------------------------
+15.  
+Run
+set a b
+set a apple
+
+Output:
+Update the value as: apple
+     
+Reason: It is correct because the set command should be able to make updates about any variable we have set before. 
+
+-------------------------------------------------------------------------
+16.  
+Run
+./print_arg $a
+
+Output:
+"apple"
+Program was successful
+     
+Reason: It is correct because here we use $a as an argument for the print_arg program. The shell should be able to look up $a in the map and change it to its value based on what we set before. So $a is interpreted as "apple", which is printed out by the program.
+
+-------------------------------------------------------------------------
+17.  
+Run
+set b bear
+./print_arg $a$b
+
+Output:
+"applebear"
+Program was successful
+     
+Reason: It is correct because here I use consecutive variable names to test whether the shell can interprete them all. $a and $b should each be replaced by their values. As we can see in the print-out results, the shell works well.
+
+-------------------------------------------------------------------------
+18.  
+Run
+./print_arg $a $b
+
+Output:
+"apple"
+"bear"
+Program was successful
+  
+Reason: It is correct because here I use consecutive variable names as two seperate arguments to check whether the shell can interprete them seperately. $a and $b should each be replaced by their values and be printed out line by line. The shell worked exactly in this way.
+ 
+-------------------------------------------------------------------------
+19.  
+Run
+./print_arg $nonexist
+
+Output:
+Error: fail to find the variable name in the map
+     
+Reason: It is correct because here I use a variable name that I didn't set before. The shell shouldn't be able to find and interprete this name in the map, and thus an error is reported.
+
+-------------------------------------------------------------------------
+20.  
+Run
+echo $ab
+
+Output:
+Error: fail to find the variable name in the map
+     
+Reason: It is correct because here I use a variable name that I didn't set before. The shell shouldn't be able to find and interprete this name in the map, and thus an error is reported.
+
+-------------------------------------------------------------------------
+21.  
+Run
+set a apple
+set b bear
+set $a$b carrot
+echo $a$b
+echo $applebear
+set $a$b $a$b$b
+echo $applebear
+
+Output:
+applebear
+Program was successful
+
+carrot
+Program was successful
+
+Update the value as: applebearbear
+applebearbear
+Program was successful
+     
+Reason: It is correct because here I use a variable name that is a combination of two variable already-set, this new variable name should be "applebear" after expansion. Echo "applebear" thus should give the value I set for it. Echo $a$b should still give the concatenation of the value of "a" and "b".
+
+-------------------------------------------------------------------------
+22.  
+Run
+set a apple
+echo $a""\\
+
+Output:
+apple  \
+Program was successful
+
+Reason: It is correct because the longest sequence of valid characters here is just "a". So only "a" would be considered as a variable name for searching in the map. Following "a", there are two quotation marks which should be regarded as double whitespace. Then there is an escaped backslash. Combine them together, we expect the output to be "apple" followed by two whitespace and a single backslash.
+
+-------------------------------------------------------------------------
+23.  
+Run
+set a apple
+echo $a..\"
+
+Output:
+apple.."
+Program was successful
+
+Reason: It is correct because the longest sequence of valid characters here is just "a". So only "a" would be considered as a variable name for searching in the map. Following "a", there are two "."s which should be kept as they are. Then there is an escaped quotation mark. Combine them together, we expect the output to be "apple" followed by two dots and a single quotation mark.
+
+-------------------------------------------------------------------------
+24.  
+Run
+set aa apple
+echo $aa\\
+
+Output:
+apple\
+Program was successful
+
+Reason: It is correct because the longest sequence of valid characters here is just "aa". So only "aa" would be considered as a variable name for searching in the map. Following "aa", there are two "\"s, which is an escaped backslash. Print them all we should have "apple\".
+
+-------------------------------------------------------------------------
+25.  
+Run
+set aa apple
+echo $aa.\
+
+Output:
+apple.
+Program was successful
+
+Reason: It is correct because the longest sequence of valid characters here is just "aa". So only "aa" would be considered as a variable name for searching in the map. Following "aa", there is a "." and a backslash, which should be ignored. Print them all we should have "apple.".
+
+-------------------------------------------------------------------------
+26.  
+Run
+echo $a is an apple
+
+Output:
+apple is an apple
+Program was successful
+
+Reason: It is correct because "a" should be expanded to its value "apple". Together with the rest of the line, the print-out result should be "apple is an apple".
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------- export command test ---------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1.  
+Run:
+set a env
+export a
+$a
+env
+
+Output:
+Update the value as: env 
+
+...
+_=./ffosh
+OLDPWD=/home/yl559
+ECE551PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+a=env
+Program was successful
+
+...
+_=./ffosh
+OLDPWD=/home/yl559
+ECE551PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+a=env
+Program was successful
+
+
+Reason: It is correct because here I set a's value to be env. Export a to the environment. Input $a, the shell should still be able to interprete it. Since it is interpreted as "env", all the environmental variables are printed out, and "a=env" is listed in them. Call "env" again and compare the print-out results with using "$a", it's the same as expected.
+
+-------------------------------------------------------------------------
+2.  
+Run:
+set aa $a
+export aa
+$aa
+env
+
+Output:
+...
+_=./ffosh
+OLDPWD=/home/yl559
+ECE551PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+a=env
+aa=env
+Program was successful
+
+...
+_=./ffosh
+OLDPWD=/home/yl559
+ECE551PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+a=env
+aa=env
+Program was successful
+
+
+Reason: It is correct because here I set aa's value to be '$a', which is another variable need to be interpreted. so aa's real value should be a's value, "env". Type "$aa" as a command, and the shell should print out all the environmental variables. Compare this result with the result printed by usign "env", they are the same.
+
+-------------------------------------------------------------------------
+3.  
+Run 
+set a an apple is red
+env
+export a
+env
+
+Output:
+Update the value as: an apple is red
+
+...
+_=./ffosh
+OLDPWD=/home/yl559
+ECE551PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+a=env
+aa=env
+Program was successful
+
+...
+_=./ffosh
+OLDPWD=/home/yl559
+ECE551PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+a=an apple is red
+aa=env
+Program was successful
+
+ 
+Reason: It is correct because here I update a's value to be a sentence with whitespace in it. So the shell should export its value as a sentence, which it did.
+
+-------------------------------------------------------------------------
+4.  
+Run:
+env
+rev a
+env
+export a
+env
+
+Output:
+...
+a=an apple is red
+aa=env
+Program was successful
+
+Reverse the value string as: der si elppa na
+
+...
+a=an apple is red
+aa=env
+Program was successful
+
+...
+a=der si elppa na
+aa=env
+Program was successful
+
+Reason: It is correct because first we use "env" to show a's value in the environment currently. Then we reverse a but not export it to see whether there will be changes in the environment too, and there's not. Then we export the reversed a, check env again. Now a's value is updated as reversed in the environment.
+
+-------------------------------------------------------------------------
+5.  
+Run 
+set PATH blahblah
+export PATH
+cd ..
+
+Output:
+ffosh:/home/yl559/ece551 $
+     
+Reason: It is correct because here I changed the PATH's value to "blahblah" and export it to the environment. Making change to PATH shouldn't have effects on the shell as in my shell, ECE551PATH used instead of PATH. PATH is only used to initialize ECE551PATH when the shell starts. Thus any change to PATH should take no effect for the next command that the user tries to execute. As we can see here, "cd .." still gets to change to the upper directory.
+
+-------------------------------------------------------------------------
+6.  
+Run
+set ECE551PATH blah
+export ECE551PATH
+cd ..
+
+Output:
+terminate called after throwing an instance of 'std::out_of_range'
+  what():  basic_string::substr: __pos (which is 8761) > this->size() (which is 4)
+Aborted
+yl559@ece551:~/ece551/mp_miniproject$ 
+   
+Reason: It is correct because in my shell, ECE551PATH used instead of PATH. Thus any change to ECE551PATH should take effect immediately for the next command that the user tries to execute. As we can see here, "cd .." didn't get to change to the upper directory due to the change of ECE551PATH.
+
+-------------------------------------------------------------------------
+7.  
+Run:
+./ffosh
+cd ..
+
+Output:
+ffosh:/home/yl559/ece551 $
+     
+Reason: It is correct because restart the shell again, the shell gets to be re-initialized, and ECE551PATH is back to normal. Now we can use "cd .. " again.
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------- rev command test -----------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1.  
+Run:
+rev
+
+Output:
+Error: missing content after rev command
+Error: no such variable in the map
+
+Reason: It is correct because there's no argument in this command line. So error printed as "missing content"
+
+-------------------------------------------------------------------------
+2.  
+Run:
+rev nonexist 
+
+Output: 
+Error: no such variable in the map
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+Reason: It is correct because here I input a non-exist variable name as argument. So error should be printed as "no such variable in the map".
+
+-------------------------------------------------------------------------
+3.  
+Run:
+rev nonexist nonexist2
+
+
+Output: 
+Error: more than one variable
+ffosh:/home/yl559/ece551/mp_miniproject $
+
+
+Reason: It is correct because here I input two variable names. So error should be printed as "more than one variable".
+
+-------------------------------------------------------------------------
+4.  
+Run: 
+set a apple
+echo $a
+rev a
+echo $a
+
+Output: 
+apple
+Program was successful
+
+Reverse the value string as: elppa
+
+elppa
+Program was successful
+
+
+Reason: It is correct because here I set a's value to be "apple", then reverse it. The result is as expected: "elppa".
+
+-------------------------------------------------------------------------
+5.  
+Run: 
+set a apple
+rev apple
+echo $a
+
+Output: 
+Update the value as: apple
+
+Error: no such variable in the map
+
+apple
+Program was successful
+
+
+Reason: It is correct because here I set a's value to be "apple", then use the variable's value "apple" instead of the variable's name "a" as an argument for "rev". The shell shouldn't be able to execute this command because there's no such variable in the map.
+
+-------------------------------------------------------------------------
+6. 
+Run:
+set b a is an a
+echo $b
+rev b
+echo $b
+
+Output:
+a is an a
+Program was successful
+
+Reverse the value string as: a na si a
+
+a na si a
+Program was successful
+
+
+Reason: It is correct because here I set b's value to be a sentence with whitespace in it. The shell should still be able to reverse it. And the result is printed out as expected.
+
+-------------------------------------------------------------------------
+7.  
+Run: 
+set b  a\ is an "aa"
+rev b
+echo $b
+
+Output: 
+Update the value as: a\ is an "aa"
+
+a\ is an "aa"
+Program was successful
+
+Reverse the value string as: "aa" na si \a
+
+"aa" na si \a
+Program was successful
+
+
+Reason: It is correct because here I set b's value to be a sentence with whitespace, quotation marks and backslash in it. The shell should still be able to reverse it. And the result is printed out as expected.
+
+-------------------------------------------------------------------------
+8.  
+Run:
+set c  "here is a sentence"  "respectively quoted"
+echo $c
+rev c 
+echo $c
+
+Output:
+"here is a sentence"  "respectively quoted"
+Program was successful
+
+Reverse the value string as: "detouq ylevitcepser"  "ecnetnes a si ereh"
+
+"detouq ylevitcepser"  "ecnetnes a si ereh"
+Program was successful
+
+
+Reason: It is correct because here I set c's value to be two quoted sentences with whitespace and quotation marks in it. The shell should still be able to reverse it. And the result is printed out as expected.
+
+
+
+
+
